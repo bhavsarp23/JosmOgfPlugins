@@ -1,0 +1,3 @@
+javac -classpath "../josm.jar:/home/parthbhavsar/.local/share/JOSM/plugins/jts.jar" ./jtsjosm/*java
+jar cfm JtsJosmPlugin.jar MANIFEST.MF ./jtsjosm/*class
+cp -f JtsJosmPlugin.jar ~/.local/share/JOSM/plugins

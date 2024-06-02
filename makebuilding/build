@@ -1,0 +1,3 @@
+javac -classpath ../josm.jar:/home/parthbhavsar/.local/share/JOSM/plugins/JtsJosmPlugin.jar ./makebuilding/*java
+jar cfm MakeBuildingPlugin.jar MANIFEST.MF ./makebuilding/*class
+cp -f MakeBuildingPlugin.jar ~/.local/share/JOSM/plugins

@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Created-By: 11.0.20 (Oracle Corporation)
+Gradle-Version: 8.2.1
+Groovy-Version: 3.0.17
+Plugin-Canloadatruntime: true
+Plugin-Class: buildingcollision.BuildingCollisionPlugin
+Plugin-Date: 2023-08-11T16:02:07.811104Z
+Plugin-Description: Removes colliding buildings
+Plugin-Early: false
+Plugin-Mainversion: 18789
+Plugin-Version: 1.2.4

@@ -1,0 +1,3 @@
+javac -classpath ../josm.jar:/home/parthbhavsar/.local/share/JOSM/plugins/JtsJosmPlugin.jar ./addsidewalks/*java
+jar cfm AddSidewalksPlugin.jar MANIFEST.MF ./addsidewalks/*class
+cp -f AddSidewalksPlugin.jar ~/.local/share/JOSM/plugins
