@@ -42,8 +42,8 @@ import java.util.HashMap;
 import java.io.*;
 import java.lang.management.BufferPoolMXBean;
 import java.util.Random;
-import java.util.concurrent.ConcurrentLinkedQueue;  
-import java.util.function.Predicate;  
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Predicate;
 
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -57,8 +57,6 @@ import org.locationtech.jts.geom.CoordinateSequenceFactory;
 import org.locationtech.jts.operation.buffer.BufferParameters;
 import org.locationtech.jts.operation.buffer.OffsetCurveBuilder;
 import org.locationtech.jts.geom.PrecisionModel;
-
-import org.openstreetmap.josm.plugins.jts.*;
 
 public class JtsJosmAction extends JosmAction {
 
@@ -86,6 +84,17 @@ public class JtsJosmAction extends JosmAction {
         for(Coordinate c : coordinates) {
             w.addNode(coordinateToNode(c));
         }
+        return w;
+    }
+
+    // This method produces a closed way from a list of coordinates
+    // It adds the first node twice - at the beginning and at the end
+    public Way coordinatesToClosedWay(List<Coordinate> coordinates) {
+        Way w = new Way();
+        for(Coordinate c : coordinates) {
+            w.addNode(coordinateToNode(c));
+        }
+        w.addNode(w.getNodes().get(0));
         return w;
     }
 
@@ -128,7 +137,7 @@ public class JtsJosmAction extends JosmAction {
     public Way polygonToWay(Polygon p) {
         Coordinate[] coordinates = p.getCoordinates();
         List<Coordinate> coordinateList = Arrays.asList(coordinates);
-        return coordinatesToWay(coordinateList);
+        return coordinatesToClosedWay(coordinateList);
     }
 
     public Way offsetWay(Way w, double distance, boolean rightSideOnly) {
@@ -143,12 +152,12 @@ public class JtsJosmAction extends JosmAction {
 
         // Get the offset curve
         Coordinate[] offsetCoordinates = ocb.getOffsetCurve(coordinates, distance);
-        
+
         // Convert the offset curve to a way
         List<Coordinate> coordinateList = Arrays.asList(offsetCoordinates);
         return coordinatesToWay(coordinateList);
     }
-        
+
 
     public Way bufferWay(Way w, double distance, boolean rightSideOnly) {
         LineString ls = wayToLineString(w);
@@ -162,6 +171,56 @@ public class JtsJosmAction extends JosmAction {
             return polygonToWay((Polygon) g);
         }
         return null;
+    }
+
+    public Node interpolate(Way w, double interpolatedDist) {
+        LineString ls = wayToLineString(w);
+        Coordinate[] coordinates = ls.getCoordinates();
+        // Edge cases
+        // If distance is 0, return the first node
+        if (interpolatedDist == 0) {
+            return coordinateToNode(coordinates[0]);
+        }
+        // If distance is greater than length of linestring, return the last
+        // node
+        if (interpolatedDist >= ls.getLength()) {
+            return coordinateToNode(coordinates[coordinates.length-1]);
+        }
+
+        double cumulativeDist = 0;
+        double currentDist, intermediateDist, x, y;
+        Coordinate interpolatedCoord = new Coordinate(0.0,0.0);
+        for (int i = 0; i < coordinates.length - 1; i++) {
+            // Calculate the distance between the current coordinate and the
+            // next coordinate
+            currentDist = coordinates[i].distance(coordinates[i+1]);
+
+            if (cumulativeDist + currentDist > interpolatedDist) {
+                // Subtract the cumulative distance from the interpolated
+                // distance
+                intermediateDist = interpolatedDist - cumulativeDist;
+
+                System.out.println("Current dist: " + currentDist);
+                System.out.println("Interm dist: " + intermediateDist);
+                System.out.println("Interp dist: " + interpolatedDist);
+                System.out.println("Cumu dist: " + cumulativeDist);
+
+                // Linearly interpolate between the two coordinates using the
+                // interpolated distance
+                x = (coordinates[i+1].getX() - coordinates[i].getX()) *
+                    intermediateDist / currentDist + coordinates[i].getX();
+                y = (coordinates[i+1].getY() - coordinates[i].getY()) *
+                    intermediateDist / currentDist + coordinates[i].getY();
+                System.out.println("--------------5" + x + "," + y);
+                interpolatedCoord.setX(x);
+                interpolatedCoord.setY(y);
+                break;
+            }
+            cumulativeDist += currentDist;
+
+        }
+        System.out.println("--------------" + interpolatedCoord.getX() + interpolatedCoord.getY());
+        return coordinateToNode(interpolatedCoord);
     }
 
     public List<Node> interpolateWayByDistance(Way w, double distance) {
@@ -183,26 +242,32 @@ public class JtsJosmAction extends JosmAction {
             }
         }
         return interpolatedNodes;
-    } 
+    }
 
-    public Way generateRectangle(Node center, float width, float height, float angle) {
+    public Node translateNode(Node n, double x, double y) {
+        Coordinate c  = nodeToCoordinate(n);
+        c.setX(c.getX() + x);
+        c.setY(c.getY() + y);
+        return coordinateToNode(c);
+    }
+
+    public Way generateRectangle(Node center, double width, double height, double angle) {
         Coordinate c = nodeToCoordinate(center);
-        Coordinate[] coordinates = new Coordinate[5];
+        Coordinate[] coordinates = new Coordinate[4];
         coordinates[0] = new Coordinate(c.x - width/2, c.y - height/2);
         coordinates[1] = new Coordinate(c.x + width/2, c.y - height/2);
         coordinates[2] = new Coordinate(c.x + width/2, c.y + height/2);
         coordinates[3] = new Coordinate(c.x - width/2, c.y + height/2);
-        coordinates[4] = new Coordinate(c.x - width/2, c.y - height/2);
 
         // Rotate the coordinates by angle in radians
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 4; i++) {
             double x = coordinates[i].x - c.x;
             double y = coordinates[i].y - c.y;
             coordinates[i].x = x * Math.cos(angle) - y * Math.sin(angle) + c.x;
             coordinates[i].y = x * Math.sin(angle) + y * Math.cos(angle) + c.y;
         }
 
-        return coordinatesToWay(Arrays.asList(coordinates));
+        return coordinatesToClosedWay(Arrays.asList(coordinates));
     }
 
     public void actionPerformed(ActionEvent e) {
@@ -210,23 +275,40 @@ public class JtsJosmAction extends JosmAction {
         DataSet ds = MainApplication.getLayerManager().getEditDataSet();
         Collection<Way> selectedWays = ds.getSelectedWays();
 
-        // Offset the selected ways by a distance of 7.5
-        for (Way w : selectedWays) {
-            Way offsetWay = offsetWay(w, 7.5, true);
-            // Interpolate the offset way
-            List<Node> interpolatedNodes = interpolateWay(offsetWay, 4.0);
-            // Add the interpolated nodes to the dataset
-            for (Node n : interpolatedNodes) {
-                AddCommand acn = new AddCommand(ds, n);
-                UndoRedoHandler.getInstance().add(acn);
-            }
-            // Add nodes to the dataset
-            for (Node n : offsetWay.getNodes()) {
-                AddCommand acn = new AddCommand(ds, n);
-                UndoRedoHandler.getInstance().add(acn);
-            }
-            AddCommand ac = new AddCommand(ds, offsetWay);
+        Way way = selectedWays.iterator().next();
+        Node n = interpolate(way, 34.0);
+        AddCommand ac = new AddCommand(ds, n);
+        UndoRedoHandler.getInstance().add(ac);
+
+        double cumulativeDist = 0;
+        while (cumulativeDist < way.getLength()) {
+            n = interpolate(way, cumulativeDist);
+            cumulativeDist += 100.0*Math.random();
+            ac = new AddCommand(ds, n);
             UndoRedoHandler.getInstance().add(ac);
         }
+
+        // // Offset the selected ways by a distance of 7.5
+        // for (Way w : selectedWays) {
+        //     Way offsetWay = offsetWay(w, 7.5, true);
+        //     // Interpolate the offset way
+        //     List<Node> interpolatedNodes = interpolateWayByDistance(offsetWay, 50.0);
+        //     // Add the interpolated nodes to the dataset
+        //     for (Node n : interpolatedNodes) {
+        //         AddCommand acn = new AddCommand(ds, n);
+        //         UndoRedoHandler.getInstance().add(acn);
+        //     }
+        //     // Add nodes to the dataset
+        //     for (Node n : offsetWay.getNodes()) {
+        //         AddCommand acn = new AddCommand(ds, n);
+        //         UndoRedoHandler.getInstance().add(acn);
+        //     }
+        //     AddCommand ac = new AddCommand(ds, offsetWay);
+        //     UndoRedoHandler.getInstance().add(ac);
+
+        //     Node n = interpolate(w, 100.0);
+        //     ac = new AddCommand(ds, n);
+        //     UndoRedoHandler.getInstance().add(ac);
+        // }
     }
 }
