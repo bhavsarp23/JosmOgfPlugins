@@ -13,10 +13,10 @@ import java.util.Arrays;
 import java.util.Scanner;
 import java.util.Map;
 import java.util.HashMap;
-import java.io.*;  
+import java.io.*;
 import java.util.Random;
-import java.util.concurrent.ConcurrentLinkedQueue;  
-import java.util.function.Predicate;  
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Predicate;
 
 import org.openstreetmap.josm.actions.JosmAction;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
@@ -37,9 +37,11 @@ import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
 
 import jtsjosm.JtsJosmAction;
 
-public class AddSidewalksAction extends JosmAction implements KeyPressReleaseListener{
+public class AddSidewalksAction extends JosmAction {
 
-    public AddSidewalksAction() {
+    private static SidewalkDialogAction sidewalkDialog;
+
+    public AddSidewalksAction(SidewalkDialogAction sidewalkDialog) {
         super(tr("Add Sidewalks."),
               "Add Sidewalks.",
               tr("Assigns a random name."),
@@ -50,7 +52,7 @@ public class AddSidewalksAction extends JosmAction implements KeyPressReleaseLis
                 Shortcut.CTRL_SHIFT
               ),
             false);
-
+        sidewalkDialog = sidewalkDialog;
     }
 
     public void actionPerformed(ActionEvent e) {
@@ -58,14 +60,31 @@ public class AddSidewalksAction extends JosmAction implements KeyPressReleaseLis
       DataSet ds = MainApplication.getLayerManager().getEditDataSet();
       Collection<Way> selectedWays = ds.getSelectedWays();
 
+      double distance = sidewalkDialog.distance;
+      boolean rightSide = sidewalkDialog.rightSide;
+      boolean leftSide = sidewalkDialog.leftSide;
+      String key = sidewalkDialog.key;
+      String value = sidewalkDialog.value;
+
       // Print debug msg
       System.out.println("Completed selection of ways -------------------------------");
 
-      // Buffer the ways by 7.5 meters using jtsjosm
+
       JtsJosmAction jts = new JtsJosmAction();
       Collection<Way> bufferedWays = new ArrayList<Way>();
-      for(Way w : selectedWays) {
-        bufferedWays.add(jts.offsetWay(w, 7.5, false));
+
+      // Buffer the ways
+      // Right side
+      if(rightSide) {
+        for(Way w : selectedWays) {
+          bufferedWays.add(jts.offsetWay(w, -1.0*distance, false));
+        }
+      }
+      // Left side
+      if(leftSide) {
+        for(Way w : selectedWays) {
+          bufferedWays.add(jts.offsetWay(w, distance, false));
+        }
       }
 
       // Print debug msg
@@ -73,7 +92,7 @@ public class AddSidewalksAction extends JosmAction implements KeyPressReleaseLis
 
       // Add the tag 'highway' = 'path' to the buffered ways
       for(Way w : bufferedWays) {
-        w.put("highway", "path");
+        w.put(key, value);
       }
       // Print debug msg
       System.out.println("Completed tagging of ways -------------------------------");
@@ -96,18 +115,6 @@ public class AddSidewalksAction extends JosmAction implements KeyPressReleaseLis
       // Add the commands to the undo/redo handler
       SequenceCommand sequenceCommand = new SequenceCommand(tr("Add new ways"), commands, true);
       UndoRedoHandler.getInstance().add(sequenceCommand);
-    }
-
-    @Override
-    public void doKeyPressed(KeyEvent e) {
-        // Get the key code
-        int keyCode = e.getKeyCode();
-
-        // If the key code is ctrl + shift + 9, then show the dialog
-        if (keyCode == KeyEvent.VK_9 && e.isControlDown() && e.isShiftDown()) {
-            e.consume();
-            new AddSidewalksConfigDialog().showDialog();
-        }
     }
 
 }
