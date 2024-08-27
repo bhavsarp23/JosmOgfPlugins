@@ -9,6 +9,8 @@ import org.openstreetmap.josm.gui.MainMenu;
 public class AddSidewalksPlugin extends Plugin {
     public AddSidewalksPlugin(PluginInformation info) {
         super(info);
-        MainMenu.add(MainApplication.getMenu().moreToolsMenu, new AddSidewalksAction());
+        SidewalkDialogAction sidewalkDialog = new SidewalkDialogAction();
+        MainMenu.add(MainApplication.getMenu().moreToolsMenu, sidewalkDialog);
+        MainMenu.add(MainApplication.getMenu().moreToolsMenu, new AddSidewalksAction( sidewalkDialog));
     }
 }
