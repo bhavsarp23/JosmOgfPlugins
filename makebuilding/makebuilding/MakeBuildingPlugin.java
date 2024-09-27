@@ -7,8 +7,13 @@ import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MainMenu;
 
 public class MakeBuildingPlugin extends Plugin {
+
+    private double width, depth, setback, lotSpacing;
+
     public MakeBuildingPlugin(PluginInformation info) {
         super(info);
-        MainMenu.add(MainApplication.getMenu().moreToolsMenu, new GenerateBuildingAction());
+        BuildingDialogAction buildingDialog = new BuildingDialogAction();
+        MainMenu.add(MainApplication.getMenu().moreToolsMenu, buildingDialog);
+        MainMenu.add(MainApplication.getMenu().moreToolsMenu, new GenerateBuildingAction(buildingDialog));
     }
 }
