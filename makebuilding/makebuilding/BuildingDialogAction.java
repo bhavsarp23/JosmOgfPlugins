@@ -44,8 +44,11 @@ import jtsjosm.JtsJosmAction;
 
 public class BuildingDialogAction extends JosmAction {
 
-  public static double width, depth, lotSpacing, setback;
+  public static double width, depth, lotSpacing, setback, lotSpacingVariance, setbackVariance;
   public static boolean rightSide, leftSide;
+  // Store a function as a variable
+  public static String lotSpacingFunction = "Gaussian";
+  public static String setbackFunction = "Gaussian";
 
   public BuildingDialogAction() {
               super(tr("Building Configuration"),
@@ -60,10 +63,12 @@ public class BuildingDialogAction extends JosmAction {
                           false);
 
     // Default values
-    width = 8;
-    depth = 17;
-    lotSpacing = 5;
-    setback = 8;
+    width = 8.0;
+    depth = 17.0;
+    lotSpacing = 5.0;
+    setback = 8.0;
+    setbackVariance = 3.0;
+    lotSpacingVariance = 0.0;
     rightSide = true;
     leftSide = true;
 
@@ -72,34 +77,56 @@ public class BuildingDialogAction extends JosmAction {
   private static void showPopOutDialog(Frame parent) {
       // Create the dialog
       JDialog dialog = new JDialog(parent, "Pop-Out Dialog", false); // 'false' for non-modal
-      dialog.setSize(300, 150);
+      dialog.setSize(500, 500);
       //dialog.setLocationRelativeTo(parent);
       dialog.setLayout(new BorderLayout());
 
       // Create a panel for the content
       JPanel contentPanel = new JPanel();
-      contentPanel.setLayout(new GridLayout(2, 5));
+      contentPanel.setLayout(new GridLayout(9, 2));
 
       // Add a label and a text field
       JLabel depthLabel = new JLabel("Depth");
-      SpinnerModel depthModel = new SpinnerNumberModel(0.0, 0.0, 50, 0.5);
+      SpinnerModel depthModel = new SpinnerNumberModel(depth, 0.0, 50, 0.5);
       JSpinner depthSpinner = new JSpinner(depthModel);
 
       JLabel widthLabel = new JLabel("Width");
-      SpinnerModel widthModel = new SpinnerNumberModel(0.0, 0.0, 50, 0.5);
+      SpinnerModel widthModel = new SpinnerNumberModel(width, 0.0, 50, 0.5);
       JSpinner widthSpinner = new JSpinner(widthModel);
 
       JLabel setbackLabel = new JLabel("Setback");
-      SpinnerModel setbackModel = new SpinnerNumberModel(0.0, 0.0, 50, 0.5);
+      SpinnerModel setbackModel = new SpinnerNumberModel(setback, -10.0, 50, 0.5);
       JSpinner setbackSpinner = new JSpinner(setbackModel);
 
+      JLabel setbackVarianceLabel = new JLabel("Setback Variance");
+      SpinnerModel setbackVarianceModel = new SpinnerNumberModel(setbackVariance, 0.0, 50, 0.5);
+      JSpinner setbackVarianceSpinner = new JSpinner(setbackVarianceModel);
+
+      // Add a dropdown menu for setback functions
+      JLabel setbackFunctionLabel = new JLabel("Setback Function");
+      String[] setbackFunctions = {"Gaussian", "Y-N", "Uniform"};
+      JComboBox<String> setbackFunctionDropdown = new JComboBox<>(setbackFunctions);
+      setbackFunctionDropdown.setSelectedItem("Gaussian");
+
       JLabel lotSpacingLabel = new JLabel("Lot Spacing");
-      SpinnerModel lotSpacingModel = new SpinnerNumberModel(0.0, 0.0, 50, 0.5);
+      SpinnerModel lotSpacingModel = new SpinnerNumberModel(lotSpacing, -10.0, 50, 0.5);
       JSpinner lotSpacingSpinner = new JSpinner(lotSpacingModel);
 
+      JLabel lotSpacingVarianceLabel = new JLabel("Lot Spacing Variance");
+      SpinnerModel lotSpacingVarianceModel = new SpinnerNumberModel(lotSpacingVariance, 0.0, 50, 0.5);
+      JSpinner lotSpacingVarianceSpinner = new JSpinner(lotSpacingVarianceModel);
+
+      // Add a dropdown menu for lot-spacing functions
+      JLabel lotSpacingFunctionLabel = new JLabel("Lot Spacing Function");
+      String[] lotSpacingFunctions = {"Gaussian", "Y-N", "Uniform"};
+      JComboBox<String> lotSpacingFunctionDropdown = new JComboBox<>(lotSpacingFunctions);
+      lotSpacingFunctionDropdown.setSelectedItem(lotSpacingFunction);
 
       JCheckBox rBox = new JCheckBox("Right side");
       JCheckBox lBox = new JCheckBox("Left side");
+
+      lBox.setSelected(leftSide);
+      rBox.setSelected(rightSide);
 
       contentPanel.add(depthLabel);
       contentPanel.add(depthSpinner);
@@ -110,8 +137,20 @@ public class BuildingDialogAction extends JosmAction {
       contentPanel.add(setbackLabel);
       contentPanel.add(setbackSpinner);
 
+      contentPanel.add(setbackVarianceLabel);
+      contentPanel.add(setbackVarianceSpinner);
+
+      contentPanel.add(new JLabel("Setback Function"));
+      contentPanel.add(setbackFunctionDropdown);
+
       contentPanel.add(lotSpacingLabel);
       contentPanel.add(lotSpacingSpinner);
+
+      contentPanel.add(lotSpacingVarianceLabel);
+      contentPanel.add(lotSpacingVarianceSpinner);
+
+      contentPanel.add(new JLabel("Lot Spacing Function"));
+      contentPanel.add(lotSpacingFunctionDropdown);
 
       contentPanel.add(rBox);
       contentPanel.add(lBox);
@@ -128,9 +167,12 @@ public class BuildingDialogAction extends JosmAction {
               depth = (double) depthSpinner.getValue();
               setback = (double) setbackSpinner.getValue();
               lotSpacing = (double) lotSpacingSpinner.getValue();
+              lotSpacingVariance = (double) lotSpacingVarianceSpinner.getValue();
+              setbackVariance = (double) setbackVarianceSpinner.getValue();
               rightSide = rBox.isSelected();
               leftSide = lBox.isSelected();
-
+              lotSpacingFunction = (String) lotSpacingFunctionDropdown.getSelectedItem();
+              setbackFunction = (String) setbackFunctionDropdown.getSelectedItem();
 
               dialog.dispose(); // Close the dialog
           }

@@ -96,6 +96,30 @@ public class GenerateBuildingAction extends JosmAction {
         return interpolatedNodes;
     }
 
+    public double executeAverageFunction(String function, double avg, double variance) {
+
+        Random random = new Random();
+
+        double result = avg;
+
+        switch (function) {
+        case "Gaussian":
+            result = avg + variance * random.nextGaussian();
+            break;
+        case "Uniform":
+            result = avg + variance * (Math.random() - 0.5);
+            break;
+        case "Y-N":
+            if (random.nextBoolean()) {
+                result = avg + variance * random.nextGaussian();
+            }
+
+        default:
+            break;
+        }
+        return result;
+    }
+
     public List<Node> generateParallelNodes(Way way) {
         JtsJosmAction jtsAction = new JtsJosmAction();
         // Generate parallel ways
@@ -118,6 +142,64 @@ public class GenerateBuildingAction extends JosmAction {
         return offsetNodes;
     }
 
+    public List<Way> getCollisionBoxes(Way w) {
+
+        List<Way> collisionBoxes = new ArrayList<Way>();
+        List<Way> highways = new ArrayList<Way>();
+        JtsJosmAction jtsAction = new JtsJosmAction();
+
+        double d1 = buildingDialog.setback;
+        double d2 = buildingDialog.setback + 2.0*buildingDialog.depth;
+
+    
+        // Get all the ways with the tag key 'highway' in the dataset that intersect with w
+        DataSet ds = MainApplication.getLayerManager().getEditDataSet();
+        Collection<Way> ways = ds.getWays();
+        for (Way way : ways) {
+            if (way == w) {
+                continue;
+            }
+            if (way.hasKey("highway")) {
+                System.out.println("Is a highway: " + way);
+                if (jtsAction.intersects(w, way)) {
+                    System.out.println("Intersects: " + way);
+                    highways.add(way);
+                }
+            }
+        }
+
+        Node center, n1, n2, n3, n4;
+        double angle1, angle2, dx1, dx2, dy1, dy2;
+        // Generate collision boxes
+        for (Way way : highways) {
+            // Intersecting coordinate of the ways
+            center = jtsAction.intersection(way, w);
+            // Get the angle of w at center
+            angle1 = jtsAction.getAngleOfWayAtNode(center, w);
+            angle2 = jtsAction.getAngleOfWayAtNode(center, way);
+            // Get dx & dy offsets from center
+            dx1 = d1 * Math.cos(angle1);
+            dy1 = d1 * Math.sin(angle1);
+            dx2 = d2 * Math.cos(angle2);
+            dy2 = d2 * Math.sin(angle2);
+            // Generate the collision box
+            n1 = jtsAction.translateNode(center, dx1 + dx2, dy2 + dy1);
+            n2 = jtsAction.translateNode(center, -dx1 + dx2, -dy1 + dy2);
+            n3 = jtsAction.translateNode(center, -dx1 - dx2, -dy1 - dy2);
+            n4 = jtsAction.translateNode(center, dx1 - dx2, dy1 - dy2);
+            Way collisionBox = new Way();
+            collisionBox.addNode(n1);
+            collisionBox.addNode(n2);
+            collisionBox.addNode(n3);
+            collisionBox.addNode(n4);
+            collisionBox.addNode(n1);
+            collisionBoxes.add(collisionBox);
+        }
+
+        return collisionBoxes;
+
+    }
+
     public List<Way> iterativeBuildings(Way w) {
 
         double avgWidth = buildingDialog.width;
@@ -125,30 +207,40 @@ public class GenerateBuildingAction extends JosmAction {
         double avgSetback = buildingDialog.setback;
         JtsJosmAction jtsAction = new JtsJosmAction();
 
-        Way owr = jtsAction.offsetWay(w, 10, true);
-        Way owl = jtsAction.offsetWay(w, -10, true);
+        Way owr = jtsAction.offsetWay(w, avgSetback, true);
+        Way owl = jtsAction.offsetWay(w, -1*avgSetback, true);
         double cumulativeDist = avgWidth;
         double rightLength = owr.getLength();
         double leftLength = owl.getLength();
-        double angle, depth, dx, dy;
+        double angle, depth, dx, dy, setbackVariance;
+        Node n1, n2;
         List<Way> ways = new ArrayList<Way>();
 
         // Right side first
         if (buildingDialog.rightSide) {
             while (cumulativeDist < rightLength) {
                 List<Node> nodes = new ArrayList<Node>();
-                // Set front nodes
-                nodes.add(jtsAction.interpolate(owr, cumulativeDist));
+                // Set front nodes (w/o setback variance)
+                n1 = jtsAction.interpolate(owr, cumulativeDist);
                 cumulativeDist += avgWidth*(Math.random()+0.5);
-                nodes.add(jtsAction.interpolate(owr, cumulativeDist));
+                n2 = jtsAction.interpolate(owr, cumulativeDist);
+                // Get angle between nodes
+                angle = getAngle(n1, n2);
+                // Determine setback variance
+                setbackVariance = executeAverageFunction(buildingDialog.lotSpacingFunction,
+                                                         avgSetback,
+                                                         buildingDialog.setbackVariance);
+                dx = setbackVariance*Math.cos(angle + Math.PI/2);
+                dy = setbackVariance*Math.sin(angle + Math.PI/2);
+                // Add front nodes
+                nodes.add(jtsAction.translateNode(n1, dx, dy));
+                nodes.add(jtsAction.translateNode(n2, dx, dy));
                 // Set back nodes
-                // Get angle between nodes 0 & 1
-                angle = getAngle(nodes.get(0), nodes.get(1));
                 // Set a random depth
                 depth = avgDepth*(Math.random()+0.5);
                 // Translate node 0 & 1 by depth & angle
-                dx = depth*Math.cos(angle + Math.PI/2);
-                dy = depth*Math.sin(angle + Math.PI/2);
+                dx += depth*Math.cos(angle + Math.PI/2);
+                dy += depth*Math.sin(angle + Math.PI/2);
                 nodes.add(jtsAction.translateNode(nodes.get(1), dx, dy));
                 nodes.add(jtsAction.translateNode(nodes.get(0), dx, dy));
                 nodes.add(nodes.get(0));
@@ -176,7 +268,11 @@ public class GenerateBuildingAction extends JosmAction {
                     way.put("building", "yes");
                     ways.add(way);
                 }
-                cumulativeDist += buildingDialog.lotSpacing;
+                
+                cumulativeDist += Math.max(executeAverageFunction(buildingDialog.lotSpacingFunction,
+                                                                  buildingDialog.lotSpacing,
+                                                                  buildingDialog.lotSpacingVariance), -1);
+                //cumulativeDist += Math.max(buildingDialog.lotSpacing + buildingDialog.lotSpacingVariance*(Math.random()-0.5), -1);
 
             }
         }
@@ -187,18 +283,27 @@ public class GenerateBuildingAction extends JosmAction {
             while (cumulativeDist < leftLength) {
                 List<Node> nodes = new ArrayList<Node>();
                 // Set front nodes
-                // double setbackVariance = 3*(Math.random()-0.5);
-                nodes.add(jtsAction.interpolate(owl, cumulativeDist));
+                // Set front nodes (w/o setback variance)
+                n1 = jtsAction.interpolate(owl, cumulativeDist);
                 cumulativeDist += avgWidth*(Math.random()+0.5);
-                nodes.add(jtsAction.interpolate(owl, cumulativeDist));
+                n2 = jtsAction.interpolate(owl, cumulativeDist);
+                // Get angle between nodes
+                angle = getAngle(n1, n2);
+                // Determine setback variance
+                setbackVariance = executeAverageFunction(buildingDialog.lotSpacingFunction,
+                                                         -1*avgSetback,
+                                                         buildingDialog.setbackVariance);
+                dx = setbackVariance*Math.cos(angle + Math.PI/2);
+                dy = setbackVariance*Math.sin(angle + Math.PI/2);
+                // Add front nodes
+                nodes.add(jtsAction.translateNode(n1, dx, dy));
+                nodes.add(jtsAction.translateNode(n2, dx, dy));
                 // Set back nodes
-                // Get angle between nodes 0 & 1
-                angle = getAngle(nodes.get(0), nodes.get(1));
                 // Set a random depth
-                depth = avgDepth*(Math.random()+0.5);
+                depth = -1*avgDepth*(Math.random()+0.5);
                 // Translate node 0 & 1 by depth & angle
-                dx = -1*depth*Math.cos(angle + Math.PI/2);
-                dy = -1*depth*Math.sin(angle + Math.PI/2);
+                dx += depth*Math.cos(angle + Math.PI/2);
+                dy += depth*Math.sin(angle + Math.PI/2);
                 nodes.add(jtsAction.translateNode(nodes.get(1), dx, dy));
                 nodes.add(jtsAction.translateNode(nodes.get(0), dx, dy));
                 nodes.add(nodes.get(0));
@@ -226,7 +331,10 @@ public class GenerateBuildingAction extends JosmAction {
                     way.put("building", "yes");
                     ways.add(way);
                 }
-                cumulativeDist += buildingDialog.lotSpacing;
+                cumulativeDist += Math.max(executeAverageFunction(buildingDialog.lotSpacingFunction,
+                                                                  buildingDialog.lotSpacing,
+                                                                  buildingDialog.lotSpacingVariance), -1);
+                //cumulativeDist += Math.max(buildingDialog.lotSpacing + buildingDialog.lotSpacingVariance*(Math.random()-0.5), -1);
             }
         }
         return ways;
@@ -313,6 +421,7 @@ public class GenerateBuildingAction extends JosmAction {
         Collection<Command> commands = new ArrayList<Command>();
         Node center = new Node(MainApplication.getMap().mapView.getCenter());
         SpatialHashGrid hashGrid = new SpatialHashGrid(center, 30, 1000, 1000);
+        List<Way> collisionBoxes, rawBuildings;
 
         // Get selected way
         float angle = 0;
@@ -325,22 +434,40 @@ public class GenerateBuildingAction extends JosmAction {
             int index = 0;
             double width, length, setback;
 
-            buildings.addAll(iterativeBuildings(way));
+            // Get collision boxes
+            // collisionBoxes = getCollisionBoxes(way);
+
+            // Iterative buildings
+            rawBuildings = iterativeBuildings(way);
+            buildings.addAll(rawBuildings);
+
+            // Remove buildings that intersect with collision boxes
+            // for (Way building : rawBuildings) {
+            //     boolean intersects = false;
+            //     for (Way collisionBox : collisionBoxes) {
+            //         if (intersects(building, collisionBox)) {
+            //             intersects = true;
+            //             break;
+            //         }
+            //     }
+            //     if (!intersects) {
+            //         buildings.add(building);
+            //     }
+            // }
+
+
+            //buildings.addAll(iterativeBuildings(way));
 
             // Add all buildings to hash grid
-            for(Way building : buildings) {
-                hashGrid.addToHash(building);
-            }
+            // for(Way building : buildings) {
+            //     hashGrid.addToHash(building);
+            // }
 
             // Add nodes of the building to dataset
             for (Way building : buildings) {
-                if (buildingObstructsWithWays(building, hashGrid)) {
-                    // 50 / 50 whether to union it or difference it
-
-                }
 
                 List<Node> nodes = building.getNodes();
-                System.out.println("------------------" + nodes);
+                //System.out.println("------------------" + nodes);
                 for (int i = 0; i < nodes.size() - 1; i++) {
                     commands.add(new AddCommand(ds, nodes.get(i)));
                 }

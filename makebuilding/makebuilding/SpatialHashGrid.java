@@ -75,8 +75,8 @@ public class SpatialHashGrid {
   }
 
   public void addToHash(Way w) {
-    System.out.println("--------------------------------------------------");
-    System.out.println("Hash: " + getSpatialHash(w));
+    //System.out.println("--------------------------------------------------");
+    //System.out.println("Hash: " + getSpatialHash(w));
     this.hashMap.get(getSpatialHash(w)).add(w);
   }
 
